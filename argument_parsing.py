@@ -116,6 +116,8 @@ class DataArgs(NumClass, Seed):
             Argument('--batch-size-test', type=int, default=100, help='batch size for testing'),
         'num_workers':
             Argument('--num-workers', type=int, default=4, help='number of dataloader workers'),
+        'pin_memory':
+            Argument('--pin-memory', action='store_true', help='pin memory for data loading'),
         'val_size':
             Argument('--val-size', type=int, default=2000, help='size of the validation set')
     }
