@@ -1,11 +1,11 @@
-from argument_parsing import *
+from .argument_parsing import *
 from tqdm.auto import tqdm
 import numpy as np
 import torch
 import torch.nn
 import torch.optim
 from torchvision.models import resnet18, resnet34
-from dataset import get_dataloader_cifar
+from .dataset import get_dataloader_cifar
 
 
 model_factories = {

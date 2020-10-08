@@ -7,8 +7,8 @@ from torch.utils.data import DataLoader, SubsetRandomSampler
 import torch
 import numpy as np
 from PIL import Image
-from utils.model_tracking import ModuleTracker, TrackingProtocol
-from utils.helpers import find_network_modules_by_name
+from .utils.model_tracking import ModuleTracker, TrackingProtocol
+from .utils.helpers import find_network_modules_by_name
 DATASETS = {'cifar10': CIFAR10, 'cifar100': CIFAR100}
 
 

@@ -2,9 +2,9 @@ import numpy as np
 import torch
 from torch.nn import Module
 from torch.utils.data import DataLoader
-from utils.hook_management import HookManager
-from utils.helpers import Protocol, get_named_modules_from_network
-from utils.model_tracking import ModuleTracker, TrackingProtocol
+from .hook_management import HookManager
+from .helpers import Protocol, get_named_modules_from_network
+from .model_tracking import ModuleTracker, TrackingProtocol
 
 
 PRUNE_METHODS = ['weight', 'weight_gradient', 'output', 'online', 'output_gradient']
