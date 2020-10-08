@@ -3,7 +3,7 @@ from torch.utils.data.dataset import Dataset
 from torchvision.datasets import CIFAR100, CIFAR10  #, ImageNet
 from torchvision.transforms import Resize, Compose, RandomCrop, RandomHorizontalFlip
 from torchvision.transforms.functional import to_tensor
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, SubsetRandomSampler
 import torch
 import numpy as np
 from PIL import Image
@@ -21,13 +21,33 @@ def get_dataset_cifar(data_dir='../data', num_classes=100, train=False, download
 
 
 def get_dataloader_cifar(batch_size=100, data_dir='../data', num_classes=100, train=True, shuffle=True,
-                         download=False, num_workers=4, **dataset_kwargs):
+                         download=False, val_size=5000, num_workers=4, pin_memory=False, seed=1, **dataset_kwargs):
     dataset = get_dataset_cifar(data_dir=data_dir, num_classes=num_classes, train=train,
                                 download=download, **dataset_kwargs)
-    if not train:
-        shuffle = False
-    loader = DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers)
-    return loader
+
+    if train:
+        np.random.seed(seed)
+        data_idxs = np.arange(len(dataset))
+        np.random.shuffle(data_idxs)
+        train_sampler, val_sampler = SubsetRandomSampler(data_idxs[val_size:]), \
+                                     SubsetRandomSampler(data_idxs[:val_size])
+        train_loader = DataLoader(dataset,
+                                  batch_size=batch_size,
+                                  sampler=train_sampler,
+                                  num_workers=num_workers,
+                                  pin_memory=pin_memory)
+        val_loader = DataLoader(dataset,
+                                batch_size=batch_size,
+                                sampler=val_sampler,
+                                num_workers=num_workers,
+                                pin_memory=pin_memory)
+        return train_loader, val_loader
+    else:
+        return DataLoader(dataset,
+                          batch_size=batch_size,
+                          shuffle=False,
+                          num_workers=num_workers,
+                          pin_memory=pin_memory)
 
 
 def extend_dataset(base_dataset):

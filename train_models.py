@@ -14,9 +14,12 @@ model_factories = {
 }
 
 
-def save_model(model, save_path, device=0):
+def save_model(model, save_path, device=0, state_dict=False):
     model.cpu()
-    torch.save(model.state_dict(), save_path)
+    if state_dict:
+        torch.save(model.state_dict(), save_path)
+    else:
+        torch.save(model, save_path)
     if device != 'cpu':
         model.cuda(device)
 
@@ -97,22 +100,26 @@ def initialize_model(args: ModelInitArgs, device=0):
 # load test/train dataloaders
 def get_dataloaders(args: DataArgs):
     if args.dataset == 'CIFAR':
-        train_loader = get_dataloader_cifar(args.batch_size_train,
-                                            data_dir=args.data_dir,
-                                            num_classes=args.num_classes,
-                                            train=True,
-                                            num_workers=args.num_workers)
+        train_loader, val_loader = get_dataloader_cifar(args.batch_size_train,
+                                                        data_dir=args.data_dir,
+                                                        num_classes=args.num_classes,
+                                                        train=True,
+                                                        num_workers=args.num_workers,
+                                                        pin_memory=args.pin_memory,
+                                                        val_size=args.val_size,
+                                                        seed=args.seed)
         test_loader = get_dataloader_cifar(args.batch_size_test,
                                            data_dir=args.data_dir,
                                            num_classes=args.num_classes,
                                            train=False,
-                                           num_workers=args.num_workers)
-    return train_loader, test_loader
+                                           num_workers=args.num_workers,
+                                           pin_memory=args.pin_memory)
+    return train_loader, val_loader, test_loader
 
 
 if __name__ == '__main__':
     model_args, save_init_args, data_args, train_args = parse_args(ModelInitArgs, InitModelPath, DataArgs, TrainRefModelArgs)
     model = initialize_model(model_args, device=0)
     save_model(model, save_init_args.init_model_path)
-    train_loader, test_loader = get_dataloaders(data_args)
+    train_loader, val, test_loader = get_dataloaders(data_args)
     train(train_args, model, train_loader, test_loader, device=0)

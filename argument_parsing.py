@@ -104,7 +104,7 @@ class Architecture(ArgumentClass):
     }
 
 
-class DataArgs(NumClass):
+class DataArgs(NumClass, Seed):
     ARGS = {
         'data_dir':
             Argument('--data-dir', type=str, default='../../data', help='path to data directory'),
@@ -115,7 +115,9 @@ class DataArgs(NumClass):
         'batch_size_test':
             Argument('--batch-size-test', type=int, default=100, help='batch size for testing'),
         'num_workers':
-            Argument('--num-workers', type=int, default=4, help='number of dataloader workers')
+            Argument('--num-workers', type=int, default=4, help='number of dataloader workers'),
+        'val_size':
+            Argument('--val-size', type=int, default=2000, help='size of the validation set')
     }
 
 
