@@ -107,7 +107,7 @@ class Architecture(ArgumentClass):
 class DataArgs(NumClass, Seed):
     ARGS = {
         'data_dir':
-            Argument('--data-dir', type=str, default='../../data', help='path to data directory'),
+            Argument('--data-dir', type=str, default='../data', help='path to data directory'),
         'dataset':
             Argument('--dataset', type=str, default='CIFAR', choices=['CIFAR'], help='the dataset to train on'),
         'batch_size_train':
