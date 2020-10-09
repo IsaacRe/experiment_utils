@@ -5,7 +5,7 @@ import torch
 import torch.nn
 import torch.optim
 from torchvision.models import resnet18, resnet34
-from .dataset import get_dataloader_cifar
+from .dataset import get_dataloader
 
 
 model_factories = {
@@ -99,21 +99,22 @@ def initialize_model(args: ModelInitArgs, device=0):
 
 # load test/train dataloaders
 def get_dataloaders(args: DataArgs):
-    if args.dataset == 'CIFAR':
-        train_loader, val_loader = get_dataloader_cifar(args.batch_size_train,
-                                                        data_dir=args.data_dir,
-                                                        num_classes=args.num_classes,
-                                                        train=True,
-                                                        num_workers=args.num_workers,
-                                                        pin_memory=args.pin_memory,
-                                                        val_size=args.val_size,
-                                                        seed=args.seed)
-        test_loader = get_dataloader_cifar(args.batch_size_test,
-                                           data_dir=args.data_dir,
-                                           num_classes=args.num_classes,
-                                           train=False,
-                                           num_workers=args.num_workers,
-                                           pin_memory=args.pin_memory)
+    train_loader, val_loader = get_dataloader(args.batch_size_train,
+                                              data_dir=args.data_dir,
+                                              base=args.dataset,
+                                              num_classes=args.num_classes,
+                                              train=True,
+                                              num_workers=args.num_workers,
+                                              pin_memory=args.pin_memory,
+                                              val_size=args.val_size,
+                                              seed=args.seed)
+    test_loader = get_dataloader(args.batch_size_test,
+                                 data_dir=args.data_dir,
+                                 base=args.dataset,
+                                 num_classes=args.num_classes,
+                                 train=False,
+                                 num_workers=args.num_workers,
+                                 pin_memory=args.pin_memory)
     return train_loader, val_loader, test_loader
 
 

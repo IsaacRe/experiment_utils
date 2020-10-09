@@ -9,21 +9,25 @@ import numpy as np
 from PIL import Image
 from .utils.model_tracking import ModuleTracker, TrackingProtocol
 from .utils.helpers import find_network_modules_by_name
-DATASETS = {'cifar10': CIFAR10, 'cifar100': CIFAR100}
+DATASETS = {'CIFAR10': CIFAR10, 'CIFAR100': CIFAR100}
 
 
-def get_dataset_cifar(data_dir='../data', num_classes=100, train=False, download=False, **dataset_kwargs):
-    dataset = 'cifar10' if num_classes == 10 else 'cifar100'
-    ExtendedDataset = extend_dataset(dataset)
+def get_dataset(data_dir='../data', base='CIFAR100', num_classes=100, train=False, download=False,
+                **dataset_kwargs):
+    if base == 'CIFAR10':
+        assert num_classes <= 10, 'CIFAR10 only has 10 classes'
+    elif base == 'CIFAR100':
+        assert num_classes <= 100, 'CIFAR100 only has 100 classes'
+    ExtendedDataset = extend_dataset(base)
     dataset = ExtendedDataset(data_dir, num_classes=num_classes, train=train, download=download,
                               **dataset_kwargs)
     return dataset
 
 
-def get_dataloader_cifar(batch_size=100, data_dir='../data', num_classes=100, train=True, shuffle=True,
-                         download=False, val_size=5000, num_workers=4, pin_memory=False, seed=1, **dataset_kwargs):
-    dataset = get_dataset_cifar(data_dir=data_dir, num_classes=num_classes, train=train,
-                                download=download, **dataset_kwargs)
+def get_dataloader(batch_size=100, data_dir='../data', base='CIFAR100', num_classes=100, train=True, shuffle=True,
+                   download=False, val_size=5000, num_workers=4, pin_memory=False, seed=1, **dataset_kwargs):
+    dataset = get_dataset(data_dir=data_dir, base=base, num_classes=num_classes, train=train,
+                          download=download, **dataset_kwargs)
 
     if train:
         np.random.seed(seed)

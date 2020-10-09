@@ -10,22 +10,29 @@ def parse_args(*arg_classes):
         yield parser.parse_defined_args()
 
 
-def get_all_bases(Class, stop_class=object):
+def get_all_bases(Class):
     bases = []
     for base in Class.__bases__:
         bases += [base]
-        if base == stop_class:
+        if base == ArgumentClass:
             continue
-        bases += get_all_bases(base, stop_class=stop_class)
+        bases += get_all_bases(base)
     return bases
 
 
 def _check_args(argsets):
+    # include all parent classes
+    all_argsets = []
+    argsets = list(argsets)
+    for arg_class in argsets:
+        all_argsets += [arg_class]
+        all_argsets += get_all_bases(arg_class)
+
     # attempt to parse all provided arguments
     all_args = {}
     argnames = set()
     args = set()
-    for ArgClass in argsets:
+    for ArgClass in all_argsets:
         for name, arg in ArgClass.ARGS.items():
             while name in argnames:
                 name += ' '
@@ -60,7 +67,7 @@ class CustomParser(ArgumentParser):
         self._add_class_args()
 
     def _add_class_args(self):
-        for ArgClass in set([self.ARGUMENT_CLASS] + get_all_bases(self.ARGUMENT_CLASS, stop_class=ArgumentClass)):
+        for ArgClass in set([self.ARGUMENT_CLASS] + get_all_bases(self.ARGUMENT_CLASS)):
             for name, arg in ArgClass.ARGS.items():
                 self.add_argument(*arg.flags, dest=name, **arg.kwargs)
 
@@ -119,7 +126,8 @@ class DataArgs(NumClass, Seed):
         'data_dir':
             Argument('--data-dir', type=str, default='../data', help='path to data directory'),
         'dataset':
-            Argument('--dataset', type=str, default='CIFAR', choices=['CIFAR'], help='the dataset to train on'),
+            Argument('--dataset', type=str, default='CIFAR100', choices=['CIFAR10', 'CIFAR100'],
+                     help='the dataset to train on'),
         'batch_size_train':
             Argument('--batch-size-train', type=int, default=100, help='batch size for training'),
         'batch_size_test':
