@@ -1,9 +1,10 @@
 from argparse import *
 from typing import *
+from collections.abc import Mapping
 
 
 def parse_args(*arg_classes):
-    _check_args()
+    _check_args(arg_classes)
     for ArgClass in arg_classes:
         parser = CustomParser(ArgClass)
         yield parser.parse_defined_args()
@@ -19,12 +20,12 @@ def get_all_bases(Class, stop_class=object):
     return bases
 
 
-def _check_args():
+def _check_args(argsets):
     # attempt to parse all provided arguments
     all_args = {}
     argnames = set()
     args = set()
-    for ArgClass in all_argsets:
+    for ArgClass in argsets:
         for name, arg in ArgClass.ARGS.items():
             while name in argnames:
                 name += ' '
@@ -68,7 +69,7 @@ class CustomParser(ArgumentParser):
         return self.ARGUMENT_CLASS(namespace)
 
 
-class ArgumentClass(Namespace):
+class ArgumentClass(Namespace, Mapping):
 
     ARGS = {}
 
@@ -76,6 +77,15 @@ class ArgumentClass(Namespace):
         super(ArgumentClass, self).__init__()
         for k, v in namespace.__dict__.items():
             setattr(self, k, v)
+
+    def __len__(self):
+        return len(self.__dict__)
+
+    def __iter__(self):
+        return iter(self.__dict__)
+
+    def __getitem__(self, item):
+        return self.__dict__[item]
 
 
 # Define argument classes below
