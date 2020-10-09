@@ -54,6 +54,7 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0):
     optim = get_optim(lr)
     loss_fn = torch.nn.CrossEntropyLoss()
     total, correct = [], []
+    mean_losses = []
     torch.manual_seed(args.seed)  # seed dataloader shuffling
 
     for e in range(args.epochs):
@@ -74,8 +75,11 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0):
             optim.zero_grad()
             losses += [loss.item()]
 
-        print('Mean loss for epoch %d: %.4f' % (e, sum(losses) / len(losses)))
+        mean_loss = sum(losses) / len(losses)
+        print('Mean loss for epoch %d: %.4f' % (e, mean_loss))
         print('Test accuracy for epoch %d:' % e, end=' ')
+
+        mean_losses += [mean_loss]
 
         model.eval()
         correct_, total_ = test(model, test_loader, device=device)
@@ -83,7 +87,9 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0):
         total += [total_]
         correct += [correct_]
         if args.save_acc:
-            np.savez(args.acc_save_path, correct=np.stack(correct, axis=0), total=np.stack(total, axis=0))
+            np.savez(args.acc_save_path,
+                     train_loss=np.array(mean_losses),
+                     val_accuracy=np.stack(correct, axis=0) / np.stack(total, axis=0))
         save_model(model, args.model_save_path, device=device)
 
 
