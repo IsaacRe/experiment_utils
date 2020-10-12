@@ -137,7 +137,7 @@ class DataArgs(NumClass, Seed):
         'pin_memory':
             Argument('--pin-memory', action='store_true', help='pin memory for data loading'),
         'val_size':
-            Argument('--val-size', type=int, default=2000, help='size of the validation set')
+            Argument('--val-size', type=int, default=5000, help='size of the validation set')
     }
 
 
@@ -153,6 +153,17 @@ class FeatureDataArgs(DataArgs):
             Argument('--load-features-test', type=str, default=None, help='path to testset feature data to load'),
         'save_features_test':
             Argument('--save-features-test', type=str, default=None, help='path to save testset feature data to')
+    }
+
+
+class IncrDataArgs(DataArgs):
+    ARGS = {
+        'classes_per_exposure':
+            Argument('--classes-per-exposure', type=int, default=10,
+                     help='number of classes in each incremental exposure'),
+        'exposure_class_splits':
+            Argument('--exposure-class-splits', type=list, nargs='+', default=None,
+                     help='specify class splits for each incremental exposure, overwriting --classes-per-exposure')
     }
 
 

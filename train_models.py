@@ -5,7 +5,7 @@ import torch
 import torch.nn
 import torch.optim
 from torchvision.models import resnet18, resnet34
-from .dataset import get_dataloader
+from .dataset import get_dataloader, get_dataloader_incr
 
 
 model_factories = {
@@ -24,17 +24,22 @@ def save_model(model, save_path, device=0, state_dict=False):
         model.cuda(device)
 
 
-def test(model, loader, device=0):
+def test(model, loader, device=0, allow_outside_task_classification=True):
     with torch.no_grad():
-        num_classes = model.fc.out_features
-        total, correct = np.zeros(num_classes), np.zeros(model.fc.out_features)
+        classes = np.array(loader.classes)
+        num_classes = len(classes)
+        total, correct = np.zeros(num_classes), np.zeros(num_classes)
         class_idxs = np.arange(num_classes)[None].repeat(loader.batch_size, axis=0)
         for i, x, y in tqdm(loader):
             x, y = x.to(device), y.to(device)
             out = model(x)
-            pred = out.argmax(dim=1)
+            if allow_outside_task_classification:
+                pred = out.argmax(dim=1)
+            else:
+                pred = out[:, np.array(classes)].argmax(dim=1)
             # TODO debug
-            y, pred = (y.cpu().numpy()[:, None] == class_idxs), (pred.cpu().numpy()[:, None] == class_idxs)
+            y, pred = (y.cpu().numpy()[:, None] == class_idxs[:len(y)]), \
+                      (pred.cpu().numpy()[:, None] == class_idxs[:len(y)])
             total += y.sum(axis=0)
             correct += np.logical_and(pred, y).sum(axis=0)
 
@@ -104,24 +109,62 @@ def initialize_model(args: ModelInitArgs, device=0):
 
 
 # load test/train dataloaders
-def get_dataloaders(args: DataArgs):
-    train_loader, val_loader = get_dataloader(args.batch_size_train,
-                                              data_dir=args.data_dir,
-                                              base=args.dataset,
-                                              num_classes=args.num_classes,
-                                              train=True,
-                                              num_workers=args.num_workers,
-                                              pin_memory=args.pin_memory,
-                                              val_size=args.val_size,
-                                              seed=args.seed)
-    test_loader = get_dataloader(args.batch_size_test,
-                                 data_dir=args.data_dir,
-                                 base=args.dataset,
-                                 num_classes=args.num_classes,
-                                 train=False,
-                                 num_workers=args.num_workers,
-                                 pin_memory=args.pin_memory)
+def get_dataloaders(args: DataArgs, load_train=True, load_test=True):
+    if load_train:
+        train_loader, val_loader = get_dataloader(batch_size_train=args.batch_size_train,
+                                                  batch_size_test=args.batch_size_test,
+                                                  data_dir=args.data_dir,
+                                                  base=args.dataset,
+                                                  num_classes=args.num_classes,
+                                                  train=True,
+                                                  num_workers=args.num_workers,
+                                                  pin_memory=args.pin_memory,
+                                                  val_size=args.val_size,
+                                                  seed=args.seed)
+    else:
+        train_loader, val_loader = None, None
+    if load_test:
+        test_loader = get_dataloader(batch_size_train=args.batch_size_test,
+                                     data_dir=args.data_dir,
+                                     base=args.dataset,
+                                     num_classes=args.num_classes,
+                                     train=False,
+                                     num_workers=args.num_workers,
+                                     pin_memory=args.pin_memory)
+    else:
+        test_loader = None
     return train_loader, val_loader, test_loader
+
+
+def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True):
+    if load_train:
+        train_loaders, val_loaders = get_dataloader_incr(batch_size_train=args.batch_size_train,
+                                                         batch_size_test=args.batch_size_test,
+                                                         data_dir=args.data_dir,
+                                                         base=args.dataset,
+                                                         num_classes=args.num_classes,
+                                                         train=True,
+                                                         num_workers=args.num_workers,
+                                                         pin_memory=args.pin_memory,
+                                                         val_size=args.val_size,
+                                                         seed=args.seed,
+                                                         classes_per_exposure=args.classes_per_exposure,
+                                                         exposure_class_splits=args.exposure_class_splits)
+    else:
+        train_loaders, val_loaders = None, None
+    if load_test:
+        test_loaders = get_dataloader_incr(batch_size=args.batch_size_test,
+                                           data_dir=args.data_dir,
+                                           base=args.dataset,
+                                           num_classes=args.num_classes,
+                                           train=False,
+                                           num_workers=args.num_workers,
+                                           pin_memory=args.pin_memory,
+                                           classes_per_exposure=args.classes_per_exposure,
+                                           exposure_class_splits=args.exposure_class_splits)
+    else:
+        test_loaders = None
+    return train_loaders, val_loaders, test_loaders
 
 
 if __name__ == '__main__':

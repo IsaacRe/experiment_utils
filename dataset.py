@@ -12,7 +12,7 @@ from .utils.helpers import find_network_modules_by_name
 DATASETS = {'CIFAR10': CIFAR10, 'CIFAR100': CIFAR100}
 
 
-def get_dataset(data_dir='../data', base='CIFAR100', num_classes=100, train=False, download=False,
+def get_dataset(data_dir='../data', base='CIFAR100', num_classes=100, train=True, download=False,
                 **dataset_kwargs):
     if base == 'CIFAR10':
         assert num_classes <= 10, 'CIFAR10 only has 10 classes'
@@ -24,8 +24,8 @@ def get_dataset(data_dir='../data', base='CIFAR100', num_classes=100, train=Fals
     return dataset
 
 
-def get_dataloader(batch_size=100, data_dir='../data', base='CIFAR100', num_classes=100, train=True, shuffle=True,
-                   download=False, val_size=5000, num_workers=4, pin_memory=False, seed=1, **dataset_kwargs):
+def get_dataloader(batch_size_train=100, batch_size_test=200, data_dir='../data', base='CIFAR100', num_classes=100,
+                   train=True, download=False, val_size=5000, num_workers=4, pin_memory=False, seed=1, **dataset_kwargs):
     dataset = get_dataset(data_dir=data_dir, base=base, num_classes=num_classes, train=train,
                           download=download, **dataset_kwargs)
 
@@ -36,22 +36,94 @@ def get_dataloader(batch_size=100, data_dir='../data', base='CIFAR100', num_clas
         train_sampler, val_sampler = SubsetRandomSampler(data_idxs[val_size:]), \
                                      SubsetRandomSampler(data_idxs[:val_size])
         train_loader = DataLoader(dataset,
-                                  batch_size=batch_size,
+                                  batch_size=batch_size_train,
                                   sampler=train_sampler,
                                   num_workers=num_workers,
                                   pin_memory=pin_memory)
         val_loader = DataLoader(dataset,
-                                batch_size=batch_size,
+                                batch_size=batch_size_test,
                                 sampler=val_sampler,
                                 num_workers=num_workers,
                                 pin_memory=pin_memory)
+        train_loader.classes = val_loader.classes = list(range(num_classes))
+
         return train_loader, val_loader
     else:
-        return DataLoader(dataset,
-                          batch_size=batch_size,
-                          shuffle=False,
-                          num_workers=num_workers,
-                          pin_memory=pin_memory)
+        test_loader = DataLoader(dataset,
+                                 batch_size=batch_size_test,
+                                 shuffle=False,
+                                 num_workers=num_workers,
+                                 pin_memory=pin_memory)
+        test_loader.classes = list(range(num_classes))
+
+        return test_loader
+
+
+def get_dataloader_incr(batch_size_train=100, batch_size_test=200, data_dir='../data', base='CIFAR100', num_classes=100,
+                        train=True, download=False, val_size=5000, num_workers=4, pin_memory=False, seed=1,
+                        classes_per_exposure=10, exposure_class_splits=None, **dataset_kwargs):
+    dataset = get_dataset(data_dir=data_dir, base=base, num_classes=num_classes, train=train,
+                          download=download, **dataset_kwargs)
+
+    if exposure_class_splits is None:
+        assert num_classes % classes_per_exposure == 0, "specified classes per exposure (%d) does not evenly divide " \
+                                                        "specified number of classes (%d)" % (classes_per_exposure,
+                                                                                              num_classes)
+        exposure_class_splits = [list(range(c, c + classes_per_exposure))
+                                 for c in range(0, num_classes, classes_per_exposure)]
+
+    targets = np.array(dataset.targets)
+
+    if train:
+        train_loaders = []
+        val_loaders = []
+
+        np.random.seed(seed)
+
+        for classes in exposure_class_splits:
+            idxs_by_class = []
+            for c in classes:
+                c_idxs = np.where(targets == c)[0]
+                np.random.shuffle(c_idxs)
+                idxs_by_class += [c_idxs]
+
+            val_size_ = val_size // len(classes)
+            train_sampler = SubsetRandomSampler(np.concatenate([c_idxs[val_size_:] for c_idxs in idxs_by_class]))
+            val_sampler = SubsetRandomSampler(np.concatenate([c_idxs[:val_size_] for c_idxs in idxs_by_class]))
+
+            train_loader = DataLoader(dataset,
+                                      batch_size=batch_size_train,
+                                      sampler=train_sampler,
+                                      num_workers=num_workers,
+                                      pin_memory=pin_memory)
+            val_loader = DataLoader(dataset,
+                                    batch_size=batch_size_test,
+                                    sampler=val_sampler,
+                                    num_workers=num_workers,
+                                    pin_memory=pin_memory)
+            train_loader.classes = val_loader.classes = classes
+
+            train_loaders += [train_loader]
+            val_loaders += [val_loader]
+
+        return train_loaders, val_loaders
+    else:
+        test_loaders = []
+
+        for classes in exposure_class_splits:
+            exposure_idxs = np.concatenate([np.where(targets == c)[0] for c in classes])
+
+            exposure_loader = DataLoader(
+                dataset,
+                batch_size=batch_size_test,
+                sampler=SubsetRandomSampler(exposure_idxs),
+                num_workers=num_workers,
+                pin_memory=pin_memory
+            )
+            exposure_loader.classes = classes
+            test_loaders += [exposure_loader]
+
+        return test_loaders
 
 
 def extend_dataset(base_dataset):
