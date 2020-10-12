@@ -28,8 +28,8 @@ def save_model(model, save_path, device=0, state_dict=False):
 def test(model, loader, device=0, multihead=False):
     with torch.no_grad():
         classes = np.array(loader.classes)
-        num_classes = len(classes)
-        total, correct = np.zeros(num_classes), np.zeros(num_classes)
+        num_classes = model.fc.out_features
+        total, correct = np.zeros(num_classes) + 1e-20, np.zeros(num_classes)
         class_idxs = np.arange(num_classes)[None].repeat(loader.batch_size, axis=0)
         for i, x, y in tqdm(loader):
             x, y = x.to(device), y.to(device)
@@ -100,7 +100,7 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
 
         mean_losses += [mean_loss]
 
-        model.eval()
+        #model.eval()
         correct_, total_ = test(model, test_loader, device=device)
         model.train()
         total += [total_]
