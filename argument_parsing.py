@@ -188,7 +188,7 @@ class TrainingArgs(Seed):
             Argument('--save-acc', action='store_true',
                      help='save per class accuracies of the model after each epoch'),
         'acc_save_path':
-            Argument('--acc-save-path', type=str, default='models/accuracies.npz'),
+            Argument('--acc-save-path', type=str, default='results/accuracies.npz'),
         'model_save_path':
             Argument('--model-save-path', type=str, default='models/model.pth'),
         'lr':
