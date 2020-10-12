@@ -187,10 +187,14 @@ class TrainingArgs(Seed):
         'save_acc':
             Argument('--save-acc', action='store_true',
                      help='save per class accuracies of the model after each epoch'),
+        'acc_save_dir':
+            Argument('--acc-save-dir', type=str, default='results', help='directory to save model stats to'),
+        'model_save_dir':
+            Argument('--model-save-dir', type=str, default='models', help='directory to save model files to'),
         'acc_save_path':
-            Argument('--acc-save-path', type=str, default='results/accuracies.npz'),
+            Argument('--acc-save-path', type=str, default='accuracies.npz'),
         'model_save_path':
-            Argument('--model-save-path', type=str, default='models/model.pth'),
+            Argument('--model-save-path', type=str, default='model.pth'),
         'lr':
             Argument('--lr', type=float, default=0.005, help='initial learning rate for training'),
         'lr_decay':

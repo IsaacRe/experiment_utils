@@ -1,3 +1,4 @@
+from os.path import join
 from .argument_parsing import *
 from tqdm.auto import tqdm
 import numpy as np
@@ -105,10 +106,10 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
         total += [total_]
         correct += [correct_]
         if args.save_acc:
-            np.savez(args.acc_save_path,
+            np.savez(join(args.acc_save_dir, args.acc_save_path),
                      train_loss=np.array(mean_losses),
                      val_accuracy=np.stack(correct, axis=0) / np.stack(total, axis=0))
-        save_model(model, args.model_save_path, device=device)
+        save_model(model, join(args.model_save_dir, args.model_save_path), device=device)
 
 
 def initialize_model(args: ModelInitArgs, device=0):
