@@ -25,7 +25,7 @@ def get_dataset(data_dir='../data', base='CIFAR100', num_classes=100, train=True
 
 
 def get_dataloader(batch_size_train=100, batch_size_test=200, data_dir='../data', base='CIFAR100', num_classes=100,
-                   train=True, download=False, val_size=5000, num_workers=4, pin_memory=False, seed=1, **dataset_kwargs):
+                   train=True, download=False, val_ratio=0.01, num_workers=4, pin_memory=False, seed=1, **dataset_kwargs):
     dataset = get_dataset(data_dir=data_dir, base=base, num_classes=num_classes, train=train,
                           download=download, **dataset_kwargs)
 
@@ -33,6 +33,7 @@ def get_dataloader(batch_size_train=100, batch_size_test=200, data_dir='../data'
         np.random.seed(seed)
         data_idxs = np.arange(len(dataset))
         np.random.shuffle(data_idxs)
+        val_size = int(len(dataset) * val_ratio)
         train_sampler, val_sampler = SubsetRandomSampler(data_idxs[val_size:]), \
                                      SubsetRandomSampler(data_idxs[:val_size])
         train_loader = DataLoader(dataset,
@@ -60,7 +61,7 @@ def get_dataloader(batch_size_train=100, batch_size_test=200, data_dir='../data'
 
 
 def get_dataloader_incr(batch_size_train=100, batch_size_test=200, data_dir='../data', base='CIFAR100', num_classes=100,
-                        train=True, download=False, val_size=5000, num_workers=4, pin_memory=False, seed=1,
+                        train=True, download=False, val_ratio=0.01, num_workers=4, pin_memory=False, seed=1,
                         classes_per_exposure=10, exposure_class_splits=None, **dataset_kwargs):
     dataset = get_dataset(data_dir=data_dir, base=base, num_classes=num_classes, train=train,
                           download=download, **dataset_kwargs)
@@ -82,14 +83,17 @@ def get_dataloader_incr(batch_size_train=100, batch_size_test=200, data_dir='../
 
         for classes in exposure_class_splits:
             idxs_by_class = []
+            val_sizes = []
             for c in classes:
                 c_idxs = np.where(targets == c)[0]
                 np.random.shuffle(c_idxs)
                 idxs_by_class += [c_idxs]
+                val_sizes += [int(len(c_idxs) * val_ratio)]
 
-            val_size_ = val_size // len(classes)
-            train_sampler = SubsetRandomSampler(np.concatenate([c_idxs[val_size_:] for c_idxs in idxs_by_class]))
-            val_sampler = SubsetRandomSampler(np.concatenate([c_idxs[:val_size_] for c_idxs in idxs_by_class]))
+            train_sampler = SubsetRandomSampler(np.concatenate([c_idxs[val_size:] for c_idxs, val_size
+                                                                in zip(idxs_by_class, val_sizes)]))
+            val_sampler = SubsetRandomSampler(np.concatenate([c_idxs[:val_size] for c_idxs, val_size
+                                                              in zip(idxs_by_class, val_sizes)]))
 
             train_loader = DataLoader(dataset,
                                       batch_size=batch_size_train,

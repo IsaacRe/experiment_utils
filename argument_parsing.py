@@ -136,8 +136,8 @@ class DataArgs(NumClass, Seed):
             Argument('--num-workers', type=int, default=4, help='number of dataloader workers'),
         'pin_memory':
             Argument('--pin-memory', action='store_true', help='pin memory for data loading'),
-        'val_size':
-            Argument('--val-size', type=int, default=5000, help='size of the validation set')
+        'val_ratio':
+            Argument('--val-ratio', type=int, default=0.05, help='ratio of validation data to training data')
     }
 
 

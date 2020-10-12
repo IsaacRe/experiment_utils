@@ -119,7 +119,7 @@ def get_dataloaders(args: DataArgs, load_train=True, load_test=True):
                                                   train=True,
                                                   num_workers=args.num_workers,
                                                   pin_memory=args.pin_memory,
-                                                  val_size=args.val_size,
+                                                  val_ratio=args.val_ratio,
                                                   seed=args.seed)
     else:
         train_loader, val_loader = None, None
@@ -146,7 +146,7 @@ def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True):
                                                          train=True,
                                                          num_workers=args.num_workers,
                                                          pin_memory=args.pin_memory,
-                                                         val_size=args.val_size,
+                                                         val_ratio=args.val_ratio,
                                                          seed=args.seed,
                                                          classes_per_exposure=args.classes_per_exposure,
                                                          exposure_class_splits=args.exposure_class_splits)
