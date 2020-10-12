@@ -24,7 +24,7 @@ def save_model(model, save_path, device=0, state_dict=False):
         model.cuda(device)
 
 
-def test(model, loader, device=0, allow_outside_task_classification=True):
+def test(model, loader, device=0, multihead=False):
     with torch.no_grad():
         classes = np.array(loader.classes)
         num_classes = len(classes)
@@ -33,10 +33,10 @@ def test(model, loader, device=0, allow_outside_task_classification=True):
         for i, x, y in tqdm(loader):
             x, y = x.to(device), y.to(device)
             out = model(x)
-            if allow_outside_task_classification:
-                pred = out.argmax(dim=1)
-            else:
+            if multihead:
                 pred = out[:, np.array(classes)].argmax(dim=1)
+            else:
+                pred = out.argmax(dim=1)
             # TODO debug
             y, pred = (y.cpu().numpy()[:, None] == class_idxs[:len(y)]), \
                       (pred.cpu().numpy()[:, None] == class_idxs[:len(y)])
@@ -47,7 +47,7 @@ def test(model, loader, device=0, allow_outside_task_classification=True):
         return correct, total
 
 
-def train(args: TrainingArgs, model, train_loader, test_loader, device=0):
+def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False):
     model.train()
     def get_optim(lr):
         return torch.optim.SGD(model.parameters(),
@@ -62,6 +62,15 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0):
     mean_losses = []
     torch.manual_seed(args.seed)  # seed dataloader shuffling
 
+    if multihead:
+        assert train_loader.classes == test_loader.classes, \
+            "passed train and test dataloaders use different class sets: %s != %s" % (str(train_loader.classes),
+                                                                                      str(test_loader.classes))
+        classes = np.array(train_loader.classes)
+        inactive_classes = np.where(
+            (np.arange(model.fc.out_features)[:, None].repeat(len(classes), 1) != classes[None]).sum(axis=1) == 0
+        )
+
     for e in range(args.epochs):
         # check for lr decay
         if e in args.decay_epochs:
@@ -74,6 +83,10 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0):
         for i, x, y in tqdm(train_loader):
             x, y = x.to(device), y.to(device)
             out = model(x)
+
+            if multihead:
+                out[:, inactive_classes] = float('-inf')
+
             loss = loss_fn(out, y)
             loss.backward()
             optim.step()
