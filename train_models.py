@@ -25,7 +25,7 @@ def save_model(model, save_path, device=0, state_dict=False):
         model.cuda(device)
 
 
-def test(model, loader, device=0, multihead=False):
+def test(model, loader, device=0, multihead=False, debug=False):
     active_outputs = np.arange(model.fc.out_features)
     if hasattr(model, 'active_outputs'):
         active_outputs = np.array(model.active_outputs)
@@ -43,7 +43,7 @@ def test(model, loader, device=0, multihead=False):
     class_idxs = np.arange(num_classes)[None].repeat(loader.batch_size, axis=0)
 
     inactive_classes = np.where(
-        (np.arange(model.fc.out_features)[:, None].repeat(len(classes), 1) != classes[None]).sum(axis=1) == 0
+        (np.arange(model.fc.out_features)[:, None].repeat(len(classes), 1) == classes[None]).sum(axis=1) == 0
     )
 
     with torch.no_grad():
@@ -64,14 +64,15 @@ def test(model, loader, device=0, multihead=False):
         return correct, total
 
 
-def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False):
+def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False, fc_only=False):
     active_outputs = np.array(model.fc.out_features)
     if hasattr(model, 'active_outputs'):
         active_outputs = np.array(model.active_outputs)
 
     model.train()
     def get_optim(lr):
-        return torch.optim.SGD(model.parameters(),
+        params = model.fc.parameters() if fc_only else model.parameters()
+        return torch.optim.SGD(params,
                                lr=lr,
                                nesterov=args.nesterov,
                                momentum=args.momentum,
@@ -91,7 +92,7 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
         classes = active_outputs
 
     inactive_classes = np.where(
-        (np.arange(model.fc.out_features)[:, None].repeat(len(classes), 1) != classes[None]).sum(axis=1) == 0
+        (np.arange(model.fc.out_features)[:, None].repeat(len(classes), 1) == classes[None]).sum(axis=1) == 0
     )
 
     for e in range(args.epochs):
@@ -122,7 +123,7 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
         mean_losses += [mean_loss]
 
         model.eval()
-        correct_, total_ = test(model, test_loader, device=device)
+        correct_, total_ = test(model, test_loader, device=device, multihead=multihead)
         model.train()
         total += [total_]
         correct += [correct_]
