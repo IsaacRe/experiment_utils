@@ -26,18 +26,34 @@ def save_model(model, save_path, device=0, state_dict=False):
 
 
 def test(model, loader, device=0, multihead=False):
-    with torch.no_grad():
+    active_outputs = np.arange(model.fc.out_features)
+    if hasattr(model, 'active_outputs'):
+        active_outputs = np.array(model.active_outputs)
+
+    # if multihead, set all classes other than those of current exposure to inactive (outputs wont contribute)
+    if multihead:
         classes = np.array(loader.classes)
-        num_classes = model.fc.out_features
-        total, correct = np.zeros(num_classes) + 1e-20, np.zeros(num_classes)
-        class_idxs = np.arange(num_classes)[None].repeat(loader.batch_size, axis=0)
+    # otherwise, make only classes that the model hasnt been exposed to yet inactive (retain previously trained outputs)
+    else:
+        classes = active_outputs
+
+    # TODO shorten class_idxs
+    num_classes = model.fc.out_features
+    total, correct = np.zeros(num_classes) + 1e-20, np.zeros(num_classes)
+    class_idxs = np.arange(num_classes)[None].repeat(loader.batch_size, axis=0)
+
+    inactive_classes = np.where(
+        (np.arange(model.fc.out_features)[:, None].repeat(len(classes), 1) != classes[None]).sum(axis=1) == 0
+    )
+
+    with torch.no_grad():
         for i, x, y in tqdm(loader):
             x, y = x.to(device), y.to(device)
             out = model(x)
-            if multihead:
-                pred = out[:, np.array(classes)].argmax(dim=1)
-            else:
-                pred = out.argmax(dim=1)
+
+            out[:, inactive_classes] = float('-inf')
+            pred = out.argmax(dim=1)
+
             # TODO debug
             y, pred = (y.cpu().numpy()[:, None] == class_idxs[:len(y)]), \
                       (pred.cpu().numpy()[:, None] == class_idxs[:len(y)])
@@ -49,6 +65,10 @@ def test(model, loader, device=0, multihead=False):
 
 
 def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False):
+    active_outputs = np.array(model.fc.out_features)
+    if hasattr(model, 'active_outputs'):
+        active_outputs = np.array(model.active_outputs)
+
     model.train()
     def get_optim(lr):
         return torch.optim.SGD(model.parameters(),
@@ -63,14 +83,16 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
     mean_losses = []
     torch.manual_seed(args.seed)  # seed dataloader shuffling
 
+    # if multihead, set all classes other than those of current exposure to inactive (outputs wont contribute)
     if multihead:
-        assert train_loader.classes == test_loader.classes, \
-            "passed train and test dataloaders use different class sets: %s != %s" % (str(train_loader.classes),
-                                                                                      str(test_loader.classes))
         classes = np.array(train_loader.classes)
-        inactive_classes = np.where(
-            (np.arange(model.fc.out_features)[:, None].repeat(len(classes), 1) != classes[None]).sum(axis=1) == 0
-        )
+    # otherwise, make only classes that the model hasnt been exposed to yet inactive (retain previously trained outputs)
+    else:
+        classes = active_outputs
+
+    inactive_classes = np.where(
+        (np.arange(model.fc.out_features)[:, None].repeat(len(classes), 1) != classes[None]).sum(axis=1) == 0
+    )
 
     for e in range(args.epochs):
         # check for lr decay
@@ -85,8 +107,7 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
             x, y = x.to(device), y.to(device)
             out = model(x)
 
-            if multihead:
-                out[:, inactive_classes] = float('-inf')
+            out[:, inactive_classes] = float('-inf')
 
             loss = loss_fn(out, y)
             loss.backward()
@@ -100,7 +121,7 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
 
         mean_losses += [mean_loss]
 
-        #model.eval()
+        model.eval()
         correct_, total_ = test(model, test_loader, device=device)
         model.train()
         total += [total_]
