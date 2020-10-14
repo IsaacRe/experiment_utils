@@ -65,7 +65,7 @@ def test(model, loader, device=0, multihead=False, debug=False):
 
 
 def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False, fc_only=False):
-    active_outputs = np.array(model.fc.out_features)
+    active_outputs = np.arange(model.fc.out_features)
     if hasattr(model, 'active_outputs'):
         active_outputs = np.array(model.active_outputs)
 
