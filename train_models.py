@@ -6,7 +6,7 @@ import torch
 import torch.nn
 import torch.optim
 from torchvision.models import resnet18, resnet34
-from .dataset import get_dataloader, get_dataloader_incr
+from .dataset import get_dataloader, get_dataloader_incr, JointDataLoader
 
 
 model_factories = {
@@ -62,6 +62,15 @@ def test(model, loader, device=0, multihead=False, debug=False):
 
         print('%d/%d (%.2f%%)' % (correct.sum(), total.sum(), correct.sum() / total.sum() * 100.))
         return correct, total
+
+
+def test_all(model, loaders, device=0, multihead=False):
+    correct = total = 0
+    for loader in loaders:
+        c, t = test(model, loader, device=device, multihead=multihead)
+        correct = correct + c
+        total = total + t
+    return correct, total
 
 
 def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False, fc_only=False):
@@ -134,6 +143,83 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
         save_model(model, join(args.model_save_dir, args.model_save_path), device=device)
 
 
+def train_batch_multihead(args: TrainingArgs, model, train_loaders, test_loaders, device=0, fc_only=False):
+    num_batches = len(train_loaders[0])
+    assert all([len(l) == num_batches for l in train_loaders]), 'some train_loaders have different number of batches'
+    num_tasks = len(train_loaders)
+    batch_size = train_loaders[0].batch_size
+    assert all([l.batch_size == batch_size for l in train_loaders]), 'some train_loaders have different batch size'
+    classes_per_task = len(train_loaders[0].classes)
+    assert all([len(l.classes) == classes_per_task for l in train_loaders]),\
+        'some train_loaders have different num classes'
+    total_classes = classes_per_task * num_tasks
+
+    model.train()
+    def get_optim(lr):
+        params = model.fc.parameters() if fc_only else model.parameters()
+        return torch.optim.SGD(params,
+                               lr=lr,
+                               nesterov=args.nesterov,
+                               momentum=args.momentum,
+                               weight_decay=args.weight_decay)
+    lr = args.lr
+    optim = get_optim(lr)
+    loss_fn = torch.nn.CrossEntropyLoss()
+    total, correct = [], []
+    mean_losses = []
+    torch.manual_seed(args.seed)  # seed dataloader shuffling
+
+    # assuming same number of classes per loader
+    classes = np.array([l.classes for l in train_loaders])  # [num_tasks X classes_per_task]
+    classes = classes[:,None].repeat(batch_size, 1).reshape(-1, classes_per_task)  # [num_tasks * batch_size X classes_per_task]
+
+    x_idxs = np.arange(batch_size * num_tasks)[:, None].repeat(classes_per_task, 1).reshape(-1)  # [batch_size * num_tasks * classes_per_task]
+    y_idxs = classes.reshape(-1)  # [batch_size * num_tasks * classes_per_task]
+
+    inactive_class_mask = np.ones((num_tasks * batch_size, total_classes)).astype(np.bool_)  # [num_tasks * batch_size X total_classes]
+    inactive_class_mask[(x_idxs, y_idxs)] = False
+
+    joint_trainloader = JointDataLoader(*train_loaders)
+
+    for e in range(args.epochs):
+        # check for lr decay
+        if e in args.decay_epochs:
+            lr /= args.lr_decay
+            optim = get_optim(lr)
+
+        print('Beginning epoch %d/%d' % (e + 1, args.epochs))
+        losses = []
+
+        for i, x, y in tqdm(joint_trainloader):
+            x, y = x.to(device), y.to(device)
+            out = model(x)
+
+            out[inactive_class_mask] = float('-inf')
+
+            loss = loss_fn(out, y)
+            loss.backward()
+            optim.step()
+            optim.zero_grad()
+            losses += [loss.item()]
+
+        mean_loss = sum(losses) / len(losses)
+        print('Mean loss for epoch %d: %.4f' % (e, mean_loss))
+        print('Test accuracy for epoch %d:' % e, end=' ')
+
+        mean_losses += [mean_loss]
+
+        model.eval()
+        correct_, total_ = test_all(model, test_loaders, device=device, multihead=True)
+        model.train()
+        total += [total_]
+        correct += [correct_]
+        if args.save_acc:
+            np.savez(join(args.acc_save_dir, args.acc_save_path),
+                     train_loss=np.array(mean_losses),
+                     val_accuracy=np.stack(correct, axis=0) / np.stack(total, axis=0))
+        save_model(model, join(args.model_save_dir, args.model_save_path), device=device)
+
+
 def initialize_model(args: ModelInitArgs, device=0):
     # load network
     torch.manual_seed(args.seed)  # seed random network initialization
@@ -172,7 +258,7 @@ def get_dataloaders(args: DataArgs, load_train=True, load_test=True):
     return train_loader, val_loader, test_loader
 
 
-def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True):
+def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True, multihead_batch=False):
     if load_train:
         train_loaders, val_loaders = get_dataloader_incr(batch_size_train=args.batch_size_train,
                                                          batch_size_test=args.batch_size_test,
@@ -185,7 +271,8 @@ def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True):
                                                          val_ratio=args.val_ratio,
                                                          seed=args.seed,
                                                          classes_per_exposure=args.classes_per_exposure,
-                                                         exposure_class_splits=args.exposure_class_splits)
+                                                         exposure_class_splits=args.exposure_class_splits,
+                                                         scale_batch_size=multihead_batch)
     else:
         train_loaders, val_loaders = None, None
     if load_test:
@@ -197,7 +284,8 @@ def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True):
                                            num_workers=args.num_workers,
                                            pin_memory=args.pin_memory,
                                            classes_per_exposure=args.classes_per_exposure,
-                                           exposure_class_splits=args.exposure_class_splits)
+                                           exposure_class_splits=args.exposure_class_splits,
+                                           scale_batch_size=multihead_batch)
     else:
         test_loaders = None
     return train_loaders, val_loaders, test_loaders

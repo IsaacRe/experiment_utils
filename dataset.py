@@ -62,7 +62,7 @@ def get_dataloader(batch_size_train=100, batch_size_test=200, data_dir='../data'
 
 def get_dataloader_incr(batch_size_train=100, batch_size_test=200, data_dir='../data', base='CIFAR100', num_classes=100,
                         train=True, download=False, val_ratio=0.01, num_workers=4, pin_memory=False, seed=1,
-                        classes_per_exposure=10, exposure_class_splits=None, **dataset_kwargs):
+                        classes_per_exposure=10, exposure_class_splits=None, scale_batch_size=False, **dataset_kwargs):
     dataset = get_dataset(data_dir=data_dir, base=base, num_classes=num_classes, train=train,
                           download=download, **dataset_kwargs)
 
@@ -72,6 +72,10 @@ def get_dataloader_incr(batch_size_train=100, batch_size_test=200, data_dir='../
                                                                                               num_classes)
         exposure_class_splits = [list(range(c, c + classes_per_exposure))
                                  for c in range(0, num_classes, classes_per_exposure)]
+
+    if scale_batch_size:
+        # scale down batch size by the number of total loader if we will be loading data across loaders concurrently
+        batch_size_train = batch_size_train // len(exposure_class_splits)
 
     targets = np.array(dataset.targets)
 
@@ -229,3 +233,17 @@ def extend_dataset(base_dataset):
             self.feature_data_set = True
 
     return ExtendedDataset
+
+
+class JointDataLoader:
+
+    def __init__(self, *dataloaders: DataLoader):
+        self.loaders = dataloaders
+
+    def __iter__(self):
+        for zipped_batch in zip(*self.loaders):
+            batch_items = zip(*zipped_batch)
+            yield (torch.cat(i) for i in batch_items)
+
+    def __len__(self):
+        return min([len(l) for l in self.loaders])
