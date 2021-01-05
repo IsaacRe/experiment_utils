@@ -206,6 +206,8 @@ class TrainingArgs(Seed):
             Argument('--nesterov', type=bool, default=True, help='whether to use nesterov optimization'),
         'momentum':
             Argument('--momentum', type=float, default=0.9, help='momentum for optimization'),
+        'adam':
+            Argument('--adam', action='store_true', help='use Adam optimization'),
         'weight_decay':
             Argument('--weight-decay', type=float, default=5e-4, help='weight decay for optimization'),
         'epochs':

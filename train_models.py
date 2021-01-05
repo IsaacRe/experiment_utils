@@ -15,7 +15,7 @@ model_factories = {
 }
 
 
-def save_model(model, save_path, device=0, state_dict=False):
+def save_model(model, save_path, device=0, state_dict=True):
     model.cpu()
     if state_dict:
         torch.save(model.state_dict(), save_path)
@@ -81,6 +81,10 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
     model.train()
     def get_optim(lr):
         params = model.fc.parameters() if fc_only else model.parameters()
+        if args.adam:
+            return torch.optim.Adam(params,
+                                    lr=lr,
+                                    weight_decay=args.weight_decay)
         return torch.optim.SGD(params,
                                lr=lr,
                                nesterov=args.nesterov,
