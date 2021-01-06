@@ -90,8 +90,14 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
                                nesterov=args.nesterov,
                                momentum=args.momentum,
                                weight_decay=args.weight_decay)
+
+    def get_scheduler(optim):
+        return torch.optim.lr_scheduler.CosineAnnealingLR(optim, T_max=args.epochs)
+
     lr = args.lr
     optim = get_optim(lr)
+    if args.use_schedule:
+        scheduler = get_scheduler(optim)
     loss_fn = torch.nn.CrossEntropyLoss()
     total, correct = [], []
     mean_losses = []
@@ -110,7 +116,9 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
 
     for e in range(args.epochs):
         # check for lr decay
-        if e in args.decay_epochs:
+        if args.use_schedule:
+            scheduler.step()
+        elif e in args.decay_epochs:
             lr /= args.lr_decay
             optim = get_optim(lr)
 

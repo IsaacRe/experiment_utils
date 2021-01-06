@@ -196,14 +196,16 @@ class TrainingArgs(Seed):
         'model_save_path':
             Argument('--model-save-path', type=str, default='model.pth'),
         'lr':
-            Argument('--lr', type=float, default=0.005, help='initial learning rate for training'),
+            Argument('--lr', type=float, default=0.1, help='initial learning rate for training'),
+        'use_schedule':
+            Argument('--use-schedule', action='store_true', help='use pyTorch learning rate scheduler'),
         'lr_decay':
             Argument('--lrd', type=float, default=5, help='divisor for learning rate decay'),
         'decay_epochs':
             Argument('--decay-epochs', type=int, nargs='*', default=[60, 120, 160],
                      help='specify epochs during which to decay learning rate'),
         'nesterov':
-            Argument('--nesterov', type=bool, default=True, help='whether to use nesterov optimization'),
+            Argument('--nesterov', action='store_true', help='whether to use nesterov optimization'),
         'momentum':
             Argument('--momentum', type=float, default=0.9, help='momentum for optimization'),
         'adam':
