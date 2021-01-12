@@ -60,11 +60,43 @@ def get_dataloader(batch_size_train=100, batch_size_test=200, data_dir='../data'
         return test_loader
 
 
-def get_dataloader_incr(batch_size_train=100, batch_size_test=200, data_dir='../data', base='CIFAR100', num_classes=100,
-                        train=True, download=False, val_ratio=0.01, num_workers=4, pin_memory=False, seed=1,
-                        classes_per_exposure=10, exposure_class_splits=None, scale_batch_size=False, **dataset_kwargs):
+def get_subset_dataloaders(*num_samples, batch_size=100, batch_size_test=100, data_dir='../data', base='CIFAR10',
+                           num_classes=10, train=True, download=False,
+                           val_ratio=0.01, num_workers=4, pin_memory=False, seed=1, disjoint=True,
+                           **dataset_kwargs):
     dataset = get_dataset(data_dir=data_dir, base=base, num_classes=num_classes, train=train,
                           download=download, **dataset_kwargs)
+
+    np.random.seed(seed)
+    data_idxs = np.arange(len(dataset))
+    np.random.shuffle(data_idxs)
+    val_size = int(len(dataset) * val_ratio)
+    val_sampler = SubsetRandomSampler(data_idxs[:val_size])
+    val_loader = DataLoader(dataset, batch_size=batch_size_test, sampler=val_sampler, num_workers=num_workers,
+                            pin_memory=pin_memory)
+
+    train_loaders = []
+    samples_processed = val_size
+    for n_samples in num_samples:
+        sampler = SubsetRandomSampler(data_idxs[samples_processed:samples_processed+n_samples])
+        samples_processed += n_samples
+        train_loaders += [DataLoader(dataset, batch_size=batch_size, sampler=sampler, num_workers=num_workers,
+                                     pin_memory=pin_memory)]
+
+    return train_loaders, val_loader
+
+
+def get_dataloader_incr(batch_size_train=100, batch_size_test=200, data_dir='../data', base='CIFAR100', num_classes=100,
+                        train=True, download=False, val_ratio=0.01, num_workers=4, pin_memory=False, seed=1,
+                        classes_per_exposure=10, exposure_class_splits=None, scale_batch_size=False,
+                        val_idxs_path=None, train_idxs_path=None, **dataset_kwargs):
+    train_val_split = None
+    if val_idxs_path is not None:
+        assert train_idxs_path is not None, 'must specify both val and train indices'
+        train_val_split = np.load(train_idxs_path), np.load(val_idxs_path)
+
+    dataset = get_dataset(data_dir=data_dir, base=base, num_classes=num_classes, train=train,
+                          download=download, train_val_split=train_val_split, **dataset_kwargs)
 
     if exposure_class_splits is None:
         assert num_classes % classes_per_exposure == 0, "specified classes per exposure (%d) does not evenly divide " \
@@ -86,18 +118,33 @@ def get_dataloader_incr(batch_size_train=100, batch_size_test=200, data_dir='../
         np.random.seed(seed)
 
         for classes in exposure_class_splits:
-            idxs_by_class = []
-            val_sizes = []
-            for c in classes:
-                c_idxs = np.where(targets == c)[0]
-                np.random.shuffle(c_idxs)
-                idxs_by_class += [c_idxs]
-                val_sizes += [int(len(c_idxs) * val_ratio)]
 
-            train_sampler = SubsetRandomSampler(np.concatenate([c_idxs[val_size:] for c_idxs, val_size
-                                                                in zip(idxs_by_class, val_sizes)]))
-            val_sampler = SubsetRandomSampler(np.concatenate([c_idxs[:val_size] for c_idxs, val_size
-                                                              in zip(idxs_by_class, val_sizes)]))
+            if val_idxs_path is not None:
+                val_idxs = dataset.val_indices
+                train_idxs = dataset.train_indices
+                val_idxs_by_class = []
+                train_idxs_by_class = []
+                for c in classes:
+                    val_mask = targets[val_idxs] == c
+                    train_mask = targets[train_idxs] == c
+                    val_idxs_by_class += [val_idxs[val_mask]]
+                    train_idxs_by_class += [train_idxs[train_mask]]
+
+                train_sampler = SubsetRandomSampler(np.concatenate(train_idxs_by_class))
+                val_sampler = SubsetRandomSampler(np.concatenate(val_idxs_by_class))
+            else:
+                idxs_by_class = []
+                val_sizes = []
+                for c in classes:
+                    c_idxs = np.where(targets == c)[0]
+                    np.random.shuffle(c_idxs)
+                    idxs_by_class += [c_idxs]
+                    val_sizes += [int(len(c_idxs) * val_ratio)]
+
+                train_sampler = SubsetRandomSampler(np.concatenate([c_idxs[val_size:] for c_idxs, val_size
+                                                                    in zip(idxs_by_class, val_sizes)]))
+                val_sampler = SubsetRandomSampler(np.concatenate([c_idxs[:val_size] for c_idxs, val_size
+                                                                  in zip(idxs_by_class, val_sizes)]))
 
             train_loader = DataLoader(dataset,
                                       batch_size=batch_size_train,
@@ -144,10 +191,16 @@ def extend_dataset(base_dataset):
                      save_features_path=None,
                      extract_at_layer=None,
                      feature_extractor=None,
+                     train_val_split=None,
                      **kwargs):
             super(ExtendedDataset, self).__init__(*args, train=train, **kwargs)
             self.train = train
             self.num_classes = num_classes
+            self.train_indices, self.val_indices = None, None
+            if train_val_split is not None:
+                assert sum([len(split) for split in train_val_split]) == len(self), \
+                    'loaded train-val split is incompatible with the dataset loaded'
+                self.train_indices, self.val_indices = train_val_split
             self.data_index = None
             self.keep_index = keep_index
             if keep_index:
@@ -207,9 +260,20 @@ def extend_dataset(base_dataset):
                 mask = np.logical_or(mask, label_arr == i)
             return mask
 
+        def _update_train_val_split(self, mask):
+            train_mask, val_mask = np.zeros(mask.shape), np.zeros(mask.shape).astype(np.bool_)
+            train_mask[self.train_indices] = True
+            val_mask[self.val_indices] = True
+            train_mask = np.logical_and(mask, train_mask)
+            val_mask = np.logical_and(mask, val_mask)
+            self.train_indices, = np.where(train_mask[mask])
+            self.val_indices, = np.where(val_mask[mask])
+
         def _set_data(self):
             label_arr = np.array(self.targets)
             mask = self._get_data_mask(label_arr)
+            if self.train_indices is not None:
+                self._update_train_val_split(mask)
             self.data = self.data[mask]
             self.targets = list(label_arr[mask])
             if self.keep_index:

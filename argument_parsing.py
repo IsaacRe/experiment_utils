@@ -137,7 +137,13 @@ class DataArgs(NumClass, Seed):
         'pin_memory':
             Argument('--pin-memory', action='store_true', help='pin memory for data loading'),
         'val_ratio':
-            Argument('--val-ratio', type=int, default=0.05, help='ratio of validation data to training data')
+            Argument('--val-ratio', type=int, default=0.05, help='ratio of validation data to training data'),
+        'train_idxs_path':
+            Argument('--train-idxs-path', type=str, default=None,
+                     help='path to train idxs of a previous train-val split to use'),
+        'val_idxs_path':
+            Argument('--val-idxs-path', type=str, default=None,
+                     help='path to val idxs of a previous train-val split to use'),
     }
 
 

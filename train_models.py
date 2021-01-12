@@ -6,7 +6,7 @@ import torch
 import torch.nn
 import torch.optim
 from torchvision.models import resnet18, resnet34
-from .dataset import get_dataloader, get_dataloader_incr, JointDataLoader
+from .dataset import get_dataloader, get_dataloader_incr, JointDataLoader, get_subset_dataloaders
 
 
 model_factories = {
@@ -73,14 +73,25 @@ def test_all(model, loaders, device=0, multihead=False):
     return correct, total
 
 
-def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False, fc_only=False):
+def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False,
+          fc_only=False, optimize_modules=None):
     active_outputs = np.arange(model.fc.out_features)
     if hasattr(model, 'active_outputs'):
         active_outputs = np.array(model.active_outputs)
 
+    if fc_only:
+        optimize_modules = []
+    elif optimize_modules is None:
+        optimize_modules = [model]
+
+    params = set()
+    for module in optimize_modules:
+        params = params.union(set(module.parameters()))
+    params = list(params)
+
     model.train()
+
     def get_optim(lr):
-        params = model.fc.parameters() if fc_only else model.parameters()
         if args.adam:
             return torch.optim.Adam(params,
                                     lr=lr,
@@ -270,7 +281,30 @@ def get_dataloaders(args: DataArgs, load_train=True, load_test=True):
     return train_loader, val_loader, test_loader
 
 
+def get_subset_data_loaders(args: DataArgs, num_samples):
+    return get_subset_dataloaders(num_samples, num_samples,
+                                  batch_size=args.batch_size_train,
+                                  batch_size_test=args.batch_size_test,
+                                  data_dir=args.data_dir,
+                                  base=args.dataset,
+                                  num_classes=args.num_classes,
+                                  train=True,
+                                  num_workers=args.num_workers,
+                                  pin_memory=args.pin_memory,
+                                  val_ratio=args.val_ratio,
+                                  seed=args.seed)
+
+
 def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True, multihead_batch=False):
+    if args.exposure_class_splits is not None:
+        class_splits = args.exposure_class_splits
+        classes_per_exp = args.classes_per_exposure
+        assert len(args.exposure_class_splits) % args.classes_per_exposure == 0,\
+            'classes_per_exposure must agree with exposure_class_splits'
+        args.exposure_class_splits = [class_splits[i:i+classes_per_exp] for i in range(0,
+                                                                                       len(class_splits),
+                                                                                       classes_per_exp)]
+        # TODO debug exposure_class_splits
     if load_train:
         train_loaders, val_loaders = get_dataloader_incr(batch_size_train=args.batch_size_train,
                                                          batch_size_test=args.batch_size_test,
@@ -281,6 +315,8 @@ def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True, mu
                                                          num_workers=args.num_workers,
                                                          pin_memory=args.pin_memory,
                                                          val_ratio=args.val_ratio,
+                                                         val_idxs_path=args.val_idxs_path,
+                                                         train_idxs_path=args.train_idxs_path,
                                                          seed=args.seed,
                                                          classes_per_exposure=args.classes_per_exposure,
                                                          exposure_class_splits=args.exposure_class_splits,
@@ -288,7 +324,7 @@ def get_dataloaders_incr(args: IncrDataArgs, load_train=True, load_test=True, mu
     else:
         train_loaders, val_loaders = None, None
     if load_test:
-        test_loaders = get_dataloader_incr(batch_size=args.batch_size_test,
+        test_loaders = get_dataloader_incr(batch_size_test=args.batch_size_test,
                                            data_dir=args.data_dir,
                                            base=args.dataset,
                                            num_classes=args.num_classes,
