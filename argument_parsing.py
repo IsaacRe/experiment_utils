@@ -3,8 +3,9 @@ from typing import *
 from collections.abc import Mapping
 
 
-def parse_args(*arg_classes):
-    _check_args(arg_classes)
+def parse_args(*arg_classes, strict=True):
+    if strict:
+        _check_args(arg_classes)
     for ArgClass in arg_classes:
         parser = CustomParser(ArgClass)
         yield parser.parse_defined_args()
