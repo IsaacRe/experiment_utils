@@ -80,7 +80,7 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
         active_outputs = np.array(model.active_outputs)
 
     if fc_only:
-        optimize_modules = []
+        optimize_modules = [model.fc]
     elif optimize_modules is None:
         optimize_modules = [model]
 
