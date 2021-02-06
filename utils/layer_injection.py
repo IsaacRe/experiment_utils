@@ -17,20 +17,34 @@ class LayerInjector:
         self.inserted_modules = {}
         model.inserted_modules = self.inserted_modules
 
+    def _wrap_forward_pre(self, module: nn.Module):
+        def forward_pre_hook(hooked_module, inp):
+            return module(inp)
+        return forward_pre_hook
+
     def _wrap_forward(self, module: nn.Module):
         def forward_hook(hooked_module, inp, out):
             return module(out)
         return forward_hook
 
-    def insert_at_layer(self, module: nn.Module, layer_name: str):
+    def insert_at_layer(self, module: nn.Module, layer_name: str, prepend=False):
         """
         Appends module forward function as a forward hook of the module specified by layer_name
         :param module: the module to insert
         :param layer_name: the layer after which to insert the module
+        :param prepend: prepend the module rather than appending it
         """
         hooked_module, = find_network_modules_by_name(self.model, [layer_name])
         self.inserted_modules[layer_name] = module
         if not hasattr(hooked_module, 'appended_modules'):
             hooked_module.appended_modules = []
-        hooked_module.appended_modules += [module]
-        self.hook_manager.register_forward_hook(self._wrap_forward(module),**{layer_name: hooked_module})
+        if not hasattr(hooked_module, 'prepended_modules'):
+            hooked_module.prepended_modules = []
+        if prepend:
+            hooked_module.prepended_modules += [module]
+            self.hook_manager.register_forward_pre_hook(self._wrap_forward_pre(module),
+                                                        **{layer_name: hooked_module})
+        else:
+            hooked_module.appended_modules += [module]
+            self.hook_manager.register_forward_hook(self._wrap_forward(module),
+                                                    **{layer_name: hooked_module})
