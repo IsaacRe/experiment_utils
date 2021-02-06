@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 from os.path import join
 from .argument_parsing import *
 from tqdm.auto import tqdm
@@ -74,7 +75,7 @@ def test_all(model, loaders, device=0, multihead=False):
 
 
 def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multihead=False,
-          fc_only=False, optimize_modules=None):
+          fc_only=False, optimize_modules=None, track_module_grad=None, track_module_grad_step=25):
     active_outputs = np.arange(model.fc.out_features)
     if hasattr(model, 'active_outputs'):
         active_outputs = np.array(model.active_outputs)
@@ -136,7 +137,7 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
         print('Beginning epoch %d/%d' % (e + 1, args.epochs))
         losses = []
 
-        for i, x, y in tqdm(train_loader):
+        for itr, (i, x, y) in enumerate(tqdm(train_loader)):
             x, y = x.to(device), y.to(device)
             out = model(x)
 
@@ -144,6 +145,14 @@ def train(args: TrainingArgs, model, train_loader, test_loader, device=0, multih
 
             loss = loss_fn(out, y)
             loss.backward()
+
+            if track_module_grad is not None and itr % track_module_grad_step == 0:
+                for j, module in enumerate(track_module_grad):
+                    print('Plotting histogram of grads for module %d' % j)
+                    plt.hist(module.weight.grad.flatten().cpu(), bins=50)
+                    plt.title('Module %d grads' % j)
+                    plt.show()
+
             optim.step()
             optim.zero_grad()
             losses += [loss.item()]
